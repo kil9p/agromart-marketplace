@@ -7,7 +7,9 @@ import type {
   User,
 } from "./agromart-types";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1";
+let API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1";
+if (API_BASE.endsWith("/")) API_BASE = API_BASE.slice(0, -1);
+if (!API_BASE.endsWith("/api/v1")) API_BASE += "/api/v1";
 
 // ---------- Session ----------
 const SESSION_KEY = "agromart_session";

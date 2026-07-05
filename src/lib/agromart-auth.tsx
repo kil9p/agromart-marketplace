@@ -51,7 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // auto-login after signup
       const loginRes = await apiLogin(input.email, input.password);
       setUser(loginRes.user);
-      return res.user;
+      return loginRes.user;
     },
     [],
   );
