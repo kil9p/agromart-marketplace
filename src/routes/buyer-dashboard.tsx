@@ -60,7 +60,22 @@ function BuyerDashboard() {
 
   const qc = useQueryClient();
   const [q, setQ] = useState("");
+  const [page, setPage] = useState(1);
+  const itemsPerPage = 6;
   const [cartOpen, setCartOpen] = useState(false);
+
+  // WebSocket for real-time inventory updates
+  useEffect(() => {
+    if (!user) return;
+    const ws = new WebSocket("ws://localhost:8000/ws/inventory");
+    ws.onmessage = (event) => {
+      console.log("Real-time inventory update:", event.data);
+      qc.invalidateQueries({ queryKey: ["produce"] });
+    };
+    return () => {
+      ws.close();
+    };
+  }, [user, qc]);
 
   const produce = useQuery({ queryKey: ["produce"], queryFn: listProduce });
   const recs = useQuery({
@@ -109,14 +124,32 @@ function BuyerDashboard() {
     );
   }, [produce.data, q]);
 
+  // Reset page when search query changes
+  useEffect(() => {
+    setPage(1);
+  }, [q]);
+
+  const totalPages = Math.ceil(filtered.length / itemsPerPage);
+  const paginated = useMemo(() => {
+    const start = (page - 1) * itemsPerPage;
+    return filtered.slice(start, start + itemsPerPage);
+  }, [filtered, page, itemsPerPage]);
+
   const cartCount = cart.data?.items.reduce((s, i) => s + i.quantity, 0) ?? 0;
+
+  const totalSpent = useMemo(() => {
+    if (!history.data) return 0;
+    return history.data
+      .filter((o) => o.status === "completed")
+      .reduce((sum, o) => sum + o.total_amount, 0);
+  }, [history.data]);
 
   if (!isReady || !user) return null;
 
   return (
     <div className="min-h-screen bg-background">
       <AgroNavbar />
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 pb-32">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Marketplace</h1>
@@ -124,71 +157,6 @@ function BuyerDashboard() {
               Fresh produce from farmers across Nigeria.
             </p>
           </div>
-          <Sheet open={cartOpen} onOpenChange={setCartOpen}>
-            <SheetTrigger asChild>
-              <Button variant="outline" className="relative">
-                <ShoppingCart className="h-4 w-4" /> Cart
-                {cartCount > 0 && (
-                  <span className="ml-1 rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground">
-                    {cartCount}
-                  </span>
-                )}
-              </Button>
-            </SheetTrigger>
-            <SheetContent className="flex w-full flex-col sm:max-w-md">
-              <SheetHeader>
-                <SheetTitle>Your cart</SheetTitle>
-              </SheetHeader>
-              <div className="flex-1 overflow-y-auto py-4">
-                {cart.data && cart.data.items.length > 0 ? (
-                  <ul className="space-y-3">
-                    {cart.data.items.map((item) => {
-                      const p = produce.data?.find((x) => x.id === item.produce_id);
-                      return (
-                        <li key={item.id} className="flex items-start justify-between gap-3 rounded-md border p-3">
-                          <div>
-                            <p className="text-sm font-medium">{p?.name ?? "Product"}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {item.quantity} × {NGN(item.unit_price)}
-                            </p>
-                            <p className="mt-1 text-sm font-semibold">{NGN(item.subtotal)}</p>
-                          </div>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => removeMut.mutate(item.produce_id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                ) : (
-                  <div className="flex h-full flex-col items-center justify-center text-center text-sm text-muted-foreground">
-                    <ShoppingCart className="mb-3 h-8 w-8" />
-                    Your cart is empty.
-                  </div>
-                )}
-              </div>
-              <SheetFooter className="border-t pt-4">
-                <div className="flex w-full flex-col gap-3">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Total</span>
-                    <span className="text-lg font-bold">
-                      {NGN(cart.data?.total_amount ?? 0)}
-                    </span>
-                  </div>
-                  <Button
-                    disabled={!cart.data || cart.data.items.length === 0 || checkoutMut.isPending}
-                    onClick={() => checkoutMut.mutate()}
-                  >
-                    {checkoutMut.isPending ? "Placing order…" : "Checkout"}
-                  </Button>
-                </div>
-              </SheetFooter>
-            </SheetContent>
-          </Sheet>
         </div>
 
         {/* Recommendations */}
@@ -229,16 +197,46 @@ function BuyerDashboard() {
           </div>
         </section>
 
-        {/* Tabs: Browse / History */}
-        <Tabs defaultValue="browse" className="mt-8">
-          <TabsList>
-            <TabsTrigger value="browse">Browse produce</TabsTrigger>
-            <TabsTrigger value="history">
-              <History className="h-4 w-4" /> Order history
-            </TabsTrigger>
-          </TabsList>
+        <div className="grid lg:grid-cols-[300px_1fr] gap-8 mt-8 items-start">
+          <aside className="space-y-6 sticky top-24">
+            <div className="rounded-xl border bg-card p-6 shadow-sm flex flex-col items-center text-center">
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-2">Total Spent</h3>
+              <p className="text-3xl font-bold text-primary">{NGN(totalSpent)}</p>
+            </div>
+            
+            <div className="rounded-xl border bg-card overflow-hidden">
+              <div className="bg-muted/50 p-4 border-b">
+                <h3 className="font-semibold flex items-center gap-2"><History className="h-4 w-4" /> Order History</h3>
+              </div>
+              <div className="p-0">
+                {history.data && history.data.length > 0 ? (
+                  <ul className="divide-y max-h-[600px] overflow-y-auto">
+                    {history.data.map((o) => (
+                      <li key={o.id} className="flex flex-col p-4 text-sm">
+                        <div className="flex justify-between items-start mb-2">
+                          <span className="font-semibold">Order #{o.id.slice(0, 6)}</span>
+                          <span className="font-bold">{NGN(o.total_amount)}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs text-muted-foreground">{new Date(o.order_date).toLocaleDateString()}</span>
+                          <Badge variant="secondary" className="text-[10px]">
+                            <CheckCircle2 className="h-3 w-3 mr-1" /> {o.status}
+                          </Badge>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="py-6 text-center text-sm text-muted-foreground">
+                    No completed orders yet.
+                  </p>
+                )}
+              </div>
+            </div>
+          </aside>
 
-          <TabsContent value="browse" className="mt-6">
+          <div className="flex-1">
+            <h2 className="text-xl font-bold mb-4">Browse Produce</h2>
             <div className="mb-4 flex items-center gap-2 rounded-md border bg-card px-3 py-2">
               <Search className="h-4 w-4 text-muted-foreground" />
               <Input
@@ -249,11 +247,11 @@ function BuyerDashboard() {
               />
             </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {filtered.map((p) => (
+              {paginated.map((p) => (
                 <ProductCard
                   key={p.id}
                   produce={p}
-                  onAdd={() => addMut.mutate({ id: p.id, qty: 1 })}
+                  onAdd={(qty) => addMut.mutate({ id: p.id, qty })}
                 />
               ))}
               {filtered.length === 0 && (
@@ -262,40 +260,113 @@ function BuyerDashboard() {
                 </p>
               )}
             </div>
-          </TabsContent>
+            {totalPages > 1 && (
+              <div className="mt-8 flex items-center justify-between border-t pt-4">
+                <Button 
+                  variant="outline" 
+                  disabled={page === 1} 
+                  onClick={() => setPage(p => p - 1)}
+                >
+                  Previous
+                </Button>
+                <div className="text-sm font-medium text-muted-foreground">
+                  Page {page} of {totalPages}
+                </div>
+                <Button 
+                  variant="outline" 
+                  disabled={page === totalPages} 
+                  onClick={() => setPage(p => p + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      </main>
 
-          <TabsContent value="history" className="mt-6">
-            <div className="rounded-xl border bg-card">
-              {history.data && history.data.length > 0 ? (
-                <ul className="divide-y">
-                  {history.data.map((o) => (
-                    <li key={o.id} className="flex items-center justify-between p-4">
-                      <div>
-                        <p className="text-sm font-medium">
-                          Order #{o.id.slice(0, 8)}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(o.order_date).toLocaleString()} · {o.items.length} item(s)
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-semibold">{NGN(o.total_amount)}</p>
-                        <Badge variant="secondary" className="mt-1">
-                          <CheckCircle2 className="h-3 w-3" /> {o.status}
-                        </Badge>
-                      </div>
-                    </li>
-                  ))}
+      <div className="fixed bottom-8 right-8 z-50">
+        <Sheet open={cartOpen} onOpenChange={setCartOpen}>
+          <SheetTrigger asChild>
+            <Button size="icon" className="h-16 w-16 rounded-full shadow-2xl relative bg-primary hover:bg-primary/90 text-primary-foreground">
+              <ShoppingCart className="h-6 w-6" />
+              {cartCount > 0 && (
+                <span className="absolute -top-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-destructive text-xs font-bold text-destructive-foreground">
+                  {cartCount}
+                </span>
+              )}
+            </Button>
+          </SheetTrigger>
+          <SheetContent className="flex w-full flex-col sm:max-w-md border-l shadow-2xl">
+            <SheetHeader>
+              <SheetTitle className="text-2xl font-bold flex items-center gap-2">
+                <ShoppingCart className="h-6 w-6" /> Your Cart
+              </SheetTitle>
+            </SheetHeader>
+            <div className="flex-1 overflow-y-auto py-4">
+              {cart.data && cart.data.items.length > 0 ? (
+                <ul className="space-y-4">
+                  {cart.data.items.map((item) => {
+                    const p = produce.data?.find((x) => x.id === item.produce_id);
+                    return (
+                      <li key={item.id} className="flex items-center gap-4 rounded-xl border bg-card p-3 shadow-sm transition-all hover:shadow-md">
+                        <div className="h-16 w-16 flex-shrink-0 rounded-lg bg-secondary flex items-center justify-center font-bold text-xl overflow-hidden relative">
+                          {p?.image_url ? (
+                            <img src={p.image_url} alt={p.name} className="absolute inset-0 w-full h-full object-cover" />
+                          ) : (
+                            p?.name.charAt(0) || "P"
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-semibold leading-none">{p?.name ?? "Product"}</p>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {item.quantity} × {NGN(item.unit_price)}
+                          </p>
+                          <p className="mt-2 font-bold text-primary">{NGN(item.subtotal)}</p>
+                        </div>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="text-destructive hover:bg-destructive/10"
+                          onClick={() => removeMut.mutate(item.produce_id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </li>
+                    );
+                  })}
                 </ul>
               ) : (
-                <p className="py-10 text-center text-sm text-muted-foreground">
-                  No completed orders yet.
-                </p>
+                <div className="flex h-full flex-col items-center justify-center text-center text-sm text-muted-foreground">
+                  <div className="rounded-full bg-secondary p-4 mb-4">
+                    <ShoppingCart className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                  <p className="text-lg font-medium text-foreground">Your cart is empty</p>
+                  <p className="mt-1">Add items from the marketplace to checkout.</p>
+                </div>
               )}
             </div>
-          </TabsContent>
-        </Tabs>
-      </main>
+            <SheetFooter className="border-t pt-6 pb-2">
+              <div className="flex w-full flex-col gap-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground font-medium">Subtotal</span>
+                  <span className="text-2xl font-bold text-primary">
+                    {NGN(cart.data?.total_amount ?? 0)}
+                  </span>
+                </div>
+                <Button
+                  size="lg"
+                  className="w-full text-lg h-12"
+                  disabled={!cart.data || cart.data.items.length === 0 || checkoutMut.isPending}
+                  onClick={() => checkoutMut.mutate()}
+                >
+                  {checkoutMut.isPending ? "Placing order…" : "Proceed to Checkout"}
+                </Button>
+              </div>
+            </SheetFooter>
+          </SheetContent>
+        </Sheet>
+      </div>
     </div>
   );
 }
@@ -305,12 +376,17 @@ function ProductCard({
   onAdd,
 }: {
   produce: Produce;
-  onAdd: () => void;
+  onAdd: (qty: number) => void;
 }) {
+  const [qty, setQty] = useState(1);
   return (
     <div className="flex flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
-      <div className="flex h-40 items-center justify-center bg-secondary text-4xl font-bold text-muted-foreground">
-        {produce.name.charAt(0)}
+      <div className="flex h-40 items-center justify-center bg-secondary text-4xl font-bold text-muted-foreground relative overflow-hidden">
+        {produce.image_url ? (
+          <img src={produce.image_url} alt={produce.name} className="absolute inset-0 h-full w-full object-cover" />
+        ) : (
+          produce.name.charAt(0)
+        )}
       </div>
       <div className="flex flex-1 flex-col p-4">
         <div className="flex items-start justify-between gap-2">
@@ -323,16 +399,39 @@ function ProductCard({
         <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
           <MapPin className="h-3 w-3" /> {produce.location}
         </div>
-        <div className="mt-auto flex items-center justify-between pt-4">
-          <div>
-            <p className="text-lg font-bold text-primary">{NGN(produce.price)}</p>
-            <p className="text-xs text-muted-foreground">
-              {produce.quantity} in stock
-            </p>
+        <div className="mt-auto flex flex-col pt-4 gap-2">
+          <div className="flex items-end justify-between">
+            <div>
+              <p className="text-lg font-bold text-primary">{NGN(produce.price)}</p>
+              <p className="text-xs text-muted-foreground">
+                {produce.quantity} in stock
+              </p>
+            </div>
+            <div className="flex items-center gap-1">
+              <Button 
+                size="icon" 
+                variant="outline" 
+                className="h-8 w-8" 
+                onClick={() => setQty(Math.max(1, qty - 1))} 
+                disabled={qty <= 1 || produce.quantity === 0}
+              >
+                -
+              </Button>
+              <span className="w-6 text-center text-sm font-medium">{qty}</span>
+              <Button 
+                size="icon" 
+                variant="outline" 
+                className="h-8 w-8" 
+                onClick={() => setQty(Math.min(produce.quantity, qty + 1))} 
+                disabled={qty >= produce.quantity || produce.quantity === 0}
+              >
+                +
+              </Button>
+              <Button className="ml-2" size="sm" onClick={() => onAdd(qty)} disabled={produce.quantity === 0}>
+                Add
+              </Button>
+            </div>
           </div>
-          <Button size="sm" onClick={onAdd} disabled={produce.quantity === 0}>
-            Add to cart
-          </Button>
         </div>
       </div>
     </div>
