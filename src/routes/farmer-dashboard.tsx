@@ -20,6 +20,9 @@ import {
   Trash2,
   TrendingUp,
   Wallet,
+  Package,
+  Camera,
+  X,
 } from "lucide-react";
 import { AgroNavbar } from "@/components/agromart-navbar";
 import { Button } from "@/components/ui/button";
@@ -66,7 +69,7 @@ export const Route = createFileRoute("/farmer-dashboard")({
   head: () => ({ meta: [{ title: "Farmer Dashboard · AgroMart" }] }),
 });
 
-const NG_STATES = ["Borno", "Kano", "Lagos", "Kaduna", "Jos", "Benue", "Cross River"];
+const NG_STATES = ["Borno", "Kano", "Lagos", "Kaduna", "Jos", "Benue", "Cross River", "Ondo", "Akure"];
 const COMMODITIES = [
   "Rice (imported)",
   "Yellow Maize",
@@ -94,6 +97,18 @@ function FarmerDashboard() {
   }, [isReady, user, navigate]);
 
   const qc = useQueryClient();
+
+  useEffect(() => {
+    if (!user) return;
+    const ws = new WebSocket("ws://localhost:8000/ws/inventory");
+    ws.onmessage = (event) => {
+      console.log("Real-time inventory update:", event.data);
+      qc.invalidateQueries({ queryKey: ["farmer"] });
+    };
+    return () => {
+      ws.close();
+    };
+  }, [user, qc]);
   const [state, setState] = useState("Borno");
   const [commodity, setCommodity] = useState("Rice (imported)");
 
@@ -115,7 +130,7 @@ function FarmerDashboard() {
   };
 
   const createMut = useMutation({
-    mutationFn: createProduce,
+    mutationFn: (data: any) => createProduce(data),
     onSuccess: () => {
       toast.success("Produce added");
       invalidateAll();
@@ -355,7 +370,7 @@ function StatCard({
 function AddProduceDialog({
   onSubmit,
 }: {
-  onSubmit: (v: Omit<Produce, "id" | "image_url">) => void;
+  onSubmit: (v: any) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
@@ -366,6 +381,26 @@ function AddProduceDialog({
     location: "",
     quantity: 0,
   });
+  const [image, setImage] = useState<File | null>(null);
+  const [gettingLocation, setGettingLocation] = useState(false);
+
+  const handleGetLocation = () => {
+    setGettingLocation(true);
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setForm({ ...form, location: `${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}` });
+          setGettingLocation(false);
+        },
+        (err) => {
+          console.error(err);
+          setGettingLocation(false);
+        }
+      );
+    } else {
+      setGettingLocation(false);
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -381,7 +416,7 @@ function AddProduceDialog({
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            onSubmit(form);
+            onSubmit({ ...form, image });
             setOpen(false);
             setForm({
               name: "",
@@ -391,6 +426,7 @@ function AddProduceDialog({
               location: "",
               quantity: 0,
             });
+            setImage(null);
           }}
           className="space-y-4"
         >
@@ -401,6 +437,41 @@ function AddProduceDialog({
           <div className="space-y-2">
             <Label>Description</Label>
             <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+          </div>
+          <div className="space-y-2">
+            <Label>Image (Optional)</Label>
+            {image ? (
+              <div className="relative h-32 w-full rounded-md border overflow-hidden">
+                <img src={URL.createObjectURL(image)} alt="Preview" className="h-full w-full object-cover" />
+                <Button 
+                  type="button" 
+                  variant="destructive" 
+                  size="icon" 
+                  className="absolute top-2 right-2 h-6 w-6"
+                  onClick={() => setImage(null)}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Input type="file" accept="image/*" onChange={(e) => setImage(e.target.files?.[0] || null)} />
+                </div>
+                <div className="relative overflow-hidden">
+                  <Button type="button" variant="outline" className="w-full h-10 px-4">
+                    <Camera className="h-4 w-4 mr-2" /> Take Photo
+                  </Button>
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    capture="environment" 
+                    className="absolute inset-0 opacity-0 cursor-pointer"
+                    onChange={(e) => setImage(e.target.files?.[0] || null)}
+                  />
+                </div>
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
@@ -415,8 +486,13 @@ function AddProduceDialog({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Location</Label>
-              <Input required value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
+              <Label>Location (Lat, Lon)</Label>
+              <div className="flex gap-2">
+                <Input value={form.location} readOnly placeholder="e.g. 9.0820, 8.6753" />
+                <Button type="button" variant="outline" size="sm" onClick={handleGetLocation} disabled={gettingLocation}>
+                  {gettingLocation ? "..." : "GPS"}
+                </Button>
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Price (₦)</Label>
