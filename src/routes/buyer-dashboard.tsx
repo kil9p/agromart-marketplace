@@ -67,7 +67,8 @@ function BuyerDashboard() {
   // WebSocket for real-time inventory updates
   useEffect(() => {
     if (!user) return;
-    const ws = new WebSocket("ws://localhost:8000/ws/inventory");
+    const wsUrl = (import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1").replace(/^http/, "ws").replace(/\/api\/v1$/, "") + "/ws/inventory";
+    const ws = new WebSocket(wsUrl);
     ws.onmessage = (event) => {
       console.log("Real-time inventory update:", event.data);
       qc.invalidateQueries({ queryKey: ["produce"] });
