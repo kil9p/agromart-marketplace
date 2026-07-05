@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import type { User } from "./agromart-types";
-import { getSession, login as apiLogin, logout as apiLogout, signup as apiSignup } from "./agromart-mock";
+import { getSession, login as apiLogin, logout as apiLogout, signup as apiSignup } from "./api";
 
 interface AuthCtx {
   user: User | null;

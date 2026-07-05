@@ -18,6 +18,7 @@ export function getSession(): { token: string; user: User } | null {
   return raw ? JSON.parse(raw) : null;
 }
 
+
 function setSession(session: { token: string; user: User } | null) {
   if (typeof window === "undefined") return;
   if (!session) window.localStorage.removeItem(SESSION_KEY);
@@ -38,7 +39,11 @@ async function fetchApi(endpoint: string, options: RequestInit = {}) {
     headers.set("Authorization", `Bearer ${session.token}`);
   }
 
-  const res = await fetch(`${API_BASE}${endpoint}`, {
+  // Ensure no double slashes when combining API_BASE and endpoint
+  const baseUrl = API_BASE.endsWith("/") ? API_BASE.slice(0, -1) : API_BASE;
+  const path = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+
+  const res = await fetch(`${baseUrl}${path}`, {
     cache: "no-store",
     ...options,
     headers,

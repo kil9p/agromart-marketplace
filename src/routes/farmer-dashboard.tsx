@@ -61,7 +61,7 @@ import {
   getFarmerStats,
   listMyProduce,
   updateInventory,
-} from "@/lib/agromart-mock";
+} from "@/lib/api";
 import type { Produce } from "@/lib/agromart-types";
 
 export const Route = createFileRoute("/farmer-dashboard")({
@@ -100,7 +100,10 @@ function FarmerDashboard() {
 
   useEffect(() => {
     if (!user) return;
-    const wsUrl = (import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1").replace(/^http/, "ws").replace(/\/api\/v1$/, "") + "/ws/inventory";
+    const rawUrl = import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1";
+    const urlObj = new URL(rawUrl);
+    urlObj.protocol = urlObj.protocol.replace("http", "ws");
+    const wsUrl = `${urlObj.protocol}//${urlObj.host}/ws/inventory`;
     const ws = new WebSocket(wsUrl);
     ws.onmessage = (event) => {
       console.log("Real-time inventory update:", event.data);
