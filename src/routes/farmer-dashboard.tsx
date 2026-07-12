@@ -61,7 +61,9 @@ import {
   getFarmerStats,
   listMyProduce,
   updateInventory,
+  getFarmerOrders,
 } from "@/lib/api";
+import { useHumanLocation } from "@/hooks/use-human-location";
 import type { Produce } from "@/lib/agromart-types";
 
 export const Route = createFileRoute("/farmer-dashboard")({
@@ -127,6 +129,10 @@ function FarmerDashboard() {
   const forecast = useQuery({
     queryKey: ["demand", state, commodity],
     queryFn: () => getDemandForecast(state, commodity, 10),
+  });
+  const orders = useQuery({
+    queryKey: ["farmer", "orders"],
+    queryFn: getFarmerOrders,
   });
 
   const invalidateAll = () => {
@@ -302,7 +308,9 @@ function FarmerDashboard() {
                   <TableCell>
                     <Badge variant="secondary">{p.category}</Badge>
                   </TableCell>
-                  <TableCell className="text-muted-foreground">{p.location}</TableCell>
+                  <TableCell>
+                    <LocationCell location={p.location} />
+                  </TableCell>
                   <TableCell className="text-right">{NGN(p.price)}</TableCell>
                   <TableCell className="text-right">
                     {p.quantity < 10 ? (
@@ -332,6 +340,49 @@ function FarmerDashboard() {
                 <TableRow>
                   <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
                     No produce yet. Add your first listing.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </section>
+
+        {/* Orders table */}
+        <section className="mt-8 rounded-xl border bg-card shadow-sm">
+          <div className="flex items-center justify-between border-b p-6">
+            <div>
+              <h2 className="text-lg font-semibold">Recent Orders</h2>
+              <p className="text-sm text-muted-foreground">
+                Track your incoming orders and their statuses.
+              </p>
+            </div>
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Order ID</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Amount</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {orders.data?.map((o) => (
+                <TableRow key={o.id}>
+                  <TableCell className="font-medium text-muted-foreground">#{o.id.slice(0, 8)}</TableCell>
+                  <TableCell>{new Date(o.order_date).toLocaleDateString()}</TableCell>
+                  <TableCell>{NGN(o.total_amount)}</TableCell>
+                  <TableCell>
+                    <Badge variant={o.status === "completed" || o.status === "fulfilled" ? "default" : "secondary"}>
+                      {o.status}
+                    </Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {orders.data && orders.data.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={4} className="py-10 text-center text-sm text-muted-foreground">
+                    No orders yet.
                   </TableCell>
                 </TableRow>
               )}
@@ -392,8 +443,15 @@ function AddProduceDialog({
     setGettingLocation(true);
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setForm({ ...form, location: `${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}` });
+        async (pos) => {
+          try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&format=json`);
+            const data = await res.json();
+            const loc = data.address?.city || data.address?.town || data.address?.village || data.address?.state || `${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`;
+            setForm({ ...form, location: loc });
+          } catch {
+            setForm({ ...form, location: `${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}` });
+          }
           setGettingLocation(false);
         },
         (err) => {
@@ -490,9 +548,9 @@ function AddProduceDialog({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Location (Lat, Lon)</Label>
+              <Label>Location</Label>
               <div className="flex gap-2">
-                <Input value={form.location} readOnly placeholder="e.g. 9.0820, 8.6753" />
+                <Input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="e.g. Kano Market, Kano" />
                 <Button type="button" variant="outline" size="sm" onClick={handleGetLocation} disabled={gettingLocation}>
                   {gettingLocation ? "..." : "GPS"}
                 </Button>
@@ -553,4 +611,9 @@ function EditInventoryDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+function LocationCell({ location }: { location: string }) {
+  const humanLoc = useHumanLocation(location);
+  return <span className="text-muted-foreground">{humanLoc}</span>;
 }

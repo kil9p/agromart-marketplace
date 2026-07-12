@@ -36,7 +36,7 @@ export interface Order {
   id: string;
   buyer_id: string;
   total_amount: number;
-  status: "cart" | "completed" | "cancelled";
+  status: "cart" | "completed" | "cancelled" | "pending" | "fulfilled";
   order_date: string;
   items: OrderItem[];
 }

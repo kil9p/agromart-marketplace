@@ -34,6 +34,7 @@ import {
   listProduce,
   removeFromCart,
 } from "@/lib/api";
+import { useHumanLocation } from "@/hooks/use-human-location";
 import type { Produce } from "@/lib/agromart-types";
 
 export const Route = createFileRoute("/buyer-dashboard")({
@@ -202,7 +203,7 @@ function BuyerDashboard() {
         </section>
 
         <div className="grid lg:grid-cols-[300px_1fr] gap-8 mt-8 items-start">
-          <aside className="space-y-6 sticky top-24">
+          <aside className="space-y-6 lg:sticky lg:top-24">
             <div className="rounded-xl border bg-card p-6 shadow-sm flex flex-col items-center text-center">
               <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-2">Total Spent</h3>
               <p className="text-3xl font-bold text-primary">{NGN(totalSpent)}</p>
@@ -383,6 +384,8 @@ function ProductCard({
   onAdd: (qty: number) => void;
 }) {
   const [qty, setQty] = useState(1);
+  const locationText = useHumanLocation(produce.location);
+
   return (
     <div className="flex flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
       <div className="flex h-40 items-center justify-center bg-secondary text-4xl font-bold text-muted-foreground relative overflow-hidden">
@@ -401,7 +404,7 @@ function ProductCard({
           {produce.description}
         </p>
         <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
-          <MapPin className="h-3 w-3" /> {produce.location}
+          <MapPin className="h-3 w-3" /> {locationText}
         </div>
         <div className="mt-auto flex flex-col pt-4 gap-2">
           <div className="flex items-end justify-between">

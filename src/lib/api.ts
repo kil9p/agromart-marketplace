@@ -230,3 +230,11 @@ export async function checkout(): Promise<Order> {
 export async function getOrderHistory(): Promise<Order[]> {
   return fetchApi("/orders/history");
 }
+
+export async function getFarmerOrders(): Promise<Order[]> {
+  try {
+    return await fetchApi("/orders/farmer");
+  } catch (e) {
+    return fetchApi("/orders/history");
+  }
+}
