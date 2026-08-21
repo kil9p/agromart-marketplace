@@ -439,30 +439,45 @@ function AddProduceDialog({
   const [image, setImage] = useState<File | null>(null);
   const [gettingLocation, setGettingLocation] = useState(false);
 
-  const handleGetLocation = () => {
-    setGettingLocation(true);
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        async (pos) => {
-          try {
-            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&format=json`);
-            const data = await res.json();
-            const loc = data.address?.city || data.address?.town || data.address?.village || data.address?.state || `${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`;
-            setForm({ ...form, location: loc });
-          } catch {
-            setForm({ ...form, location: `${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}` });
-          }
-          setGettingLocation(false);
-        },
-        (err) => {
-          console.error(err);
-          setGettingLocation(false);
-        }
-      );
-    } else {
-      setGettingLocation(false);
-    }
+const handleGetLocation = () => {
+  setGettingLocation(true);
+  
+  const geoOptions = {
+    enableHighAccuracy: false, 
+    timeout: 5000,             
+    maximumAge: 60000          
   };
+
+  if (!navigator.geolocation) {
+    setGettingLocation(false);
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      try {
+        const res = await fetch(
+          `https://openstreetmap.org{pos.coords.latitude}&lon=${pos.coords.longitude}&format=json`,
+          { headers: { 'User-Agent': 'AgroMart' } } 
+        );
+        const data = await res.json();
+        const loc = data.address?.city || data.address?.town || data.address?.village || data.address?.state || `${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`;
+        
+        setForm(prevForm => ({ ...prevForm, location: loc }));
+      } catch {
+        setForm(prevForm => ({ ...prevForm, location: `${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}` }));
+      } finally {
+        setGettingLocation(false);
+      }
+    },
+    (err) => {
+      console.error(err);
+      setGettingLocation(false);
+    }, 
+    geoOptions
+  );
+};
+
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
